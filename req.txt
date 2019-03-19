@@ -1,0 +1,5 @@
+request
+vk_api
+pymongo
+lxml
+cssselect
