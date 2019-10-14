@@ -133,7 +133,7 @@ def send(user_id, msg, raw=False, keyboard=None):
     else:
         vk.messages.send(user_id=user_id, message=msg, random_id=rnd, keyboard=keyboard)
 
-    print("* \033[95m(: \033[0m : id" + str(user_id) + " < " + msg[:10])
+    print("* \033[95m(: \033[0m : id" + str(user_id) + " < ")
 
 
 def main():
