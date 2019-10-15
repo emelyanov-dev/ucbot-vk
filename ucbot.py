@@ -14,26 +14,36 @@ from vk_api.longpoll import VkLongPoll, VkEventType
 
 _CONFIG = json.loads(open('config.json', "r", encoding='UTF-8').read())
 
+"""
+    MongoDB auth
+"""
 client = MongoClient('127.0.0.1', 27017)
 db = client.ucbot
 
+
+"""
+    Vk auth
+"""
 vk_session = vk_api.VkApi(token=open('token.txt', 'r', encoding='UTF-8').read())
 vk = vk_session.get_api()
-long_poll = VkLongPoll(vk_session)
+bot = VkLongPoll(vk_session)
 
-start_kbd = VkKeyboard()
-start_kbd.add_button('Начать', VkKeyboardColor.POSITIVE)
+"""
+    Keyboards
+"""
+START_KEYBOARD = VkKeyboard()
+START_KEYBOARD.add_button('Начать', VkKeyboardColor.POSITIVE)
 
-get_type = VkKeyboard()
-get_type.add_button('Преподователь', VkKeyboardColor.POSITIVE)
-get_type.add_button('Студент', VkKeyboardColor.POSITIVE)
+GET_TYPE_KEYBOARD = VkKeyboard()
+GET_TYPE_KEYBOARD.add_button('Преподователь', VkKeyboardColor.POSITIVE)
+GET_TYPE_KEYBOARD.add_button('Студент', VkKeyboardColor.POSITIVE)
 
-cancel_key = VkKeyboard()
-cancel_key.add_button('Вернуться обратно', VkKeyboardColor.DEFAULT)
+RETURN_KEYBOARD = VkKeyboard()
+RETURN_KEYBOARD.add_button('Вернуться обратно', VkKeyboardColor.DEFAULT)
 
-day_count = VkKeyboard()
-day_count.add_button('На сегодня', VkKeyboardColor.POSITIVE)
-day_count.add_button('На завтра', VkKeyboardColor.POSITIVE)
+MAIN_KEYBOARD = VkKeyboard()
+MAIN_KEYBOARD.add_button('На сегодня', VkKeyboardColor.POSITIVE)
+MAIN_KEYBOARD.add_button('На завтра', VkKeyboardColor.POSITIVE)
 
 
 def get_groups(user_type, date) -> object:
@@ -122,79 +132,126 @@ def get_date(days):
     return tomorrow.strftime("%d-%m-%Y")
 
 
-def send(user_id, msg, raw=False, keyboard=None):
-    rnd = random.randint(10000000000, 99999999999)
+class User:
+    def __init__(self, user_id):
+        self.user = db.users.find_one({'_id': user_id})
+        self.id = self.user['_id']
+        self.type_id = self.user['type_id']
+        self.group = self.user['group']
 
-    if raw and msg.startswith('error_') or raw is False:
-        msg = _CONFIG['messages'][msg]
+    def set_type_id(self, type_id):
+        db.users.update_one({'_id': self.id}, {'$set': {'type_id': type_id}})
 
-    if keyboard is None:
-        vk.messages.send(user_id=user_id, message=msg, random_id=rnd)
-    else:
-        vk.messages.send(user_id=user_id, message=msg, random_id=rnd, keyboard=keyboard)
+    def is_set_type_id(self):
+        return self.type_id is None
 
-    print("* \033[95m(: \033[0m : id" + str(user_id) + " < ")
+    def set_group(self, group):
+        db.users.update_one({'_id': self.id}, {'$set': {'group': group}})
+
+    def is_set_group(self):
+        return self.group is None
+
+    def send(self, msg, raw=False, keyboard=None):
+        rnd = random.randint(10000000000, 99999999999)
+
+        if raw and msg.startswith('error_') or raw is False:
+            msg = _CONFIG['messages'][msg]
+
+        if keyboard is None:
+            vk.messages.send(user_id=self.id, message=msg, random_id=rnd)
+        else:
+            vk.messages.send(user_id=self.id, message=msg, random_id=rnd, keyboard=keyboard)
+
+        print("* \033[95m(: \033[0m : id" + str(self.id) + " < ")
+
+    def send_table(self, days):
+        self.send(get_table(self.type_id, get_date(days), self.group), raw=True)
+
+    def delete(self):
+        db.users.delete_one({'_id': self.id})
+
+    @staticmethod
+    def create(user_id):
+        db.users.insert_one({
+            '_id': user_id,
+            'type_id': None,
+            'sub': False,
+            'group': None,
+        })
+        vk.messages.send(user_id=user_id,
+                         message=_CONFIG['messages']['get_user_type'],
+                         random_id=random.randint(10000000000, 99999999999),
+                         keyboard=GET_TYPE_KEYBOARD.get_keyboard())
 
 
 def main():
     print('run')
-    for event in long_poll.listen():
+    for event in bot.listen():
         if event.type == VkEventType.MESSAGE_NEW and event.to_me and event.text:
             if db.users.count_documents({'_id': event.user_id}) == 0:
-                db.users.insert_one({
-                    '_id': event.user_id,
-                    'type_id': None,
-                    'sub': False,
-                    'group': None,
-                })
-                send(event.user_id, 'get_user_type', keyboard=get_type.get_keyboard())
+
+                User.create(event.user_id)
                 continue
 
-            c_user = db.users.find_one({'_id': event.user_id})
+            user = User(event.user_id)
 
-            if c_user['type_id'] is None:
+            if user.is_set_type_id():
                 if event.text in ['Преподователь', '2']:
-                    db.users.update_one({'_id': event.user_id}, {'$set': {'type_id': 2}})
-                    send(event.user_id, 'get_teacher_name', keyboard=cancel_key.get_keyboard())
+
+                    user.set_type_id(2)
+                    user.send('get_teacher_name', keyboard=RETURN_KEYBOARD.get_keyboard())
+
                 elif event.text in ['Студент', '1']:
-                    db.users.update_one({'_id': event.user_id}, {'$set': {'type_id': 1}})
-                    send(event.user_id, 'get_student_group', keyboard=cancel_key.get_keyboard())
+
+                    user.set_type_id(1)
+                    user.send('get_student_group', keyboard=RETURN_KEYBOARD.get_keyboard())
+
                 continue
 
-            if c_user['group'] is None:
+            if user.is_set_group():
                 if event.text in ['Вернуться обратно', '1']:
-                    db.users.update_one({'_id': event.user_id}, {'$set': {'type_id': None}})
-                    send(event.user_id, 'get_user_type', keyboard=get_type.get_keyboard())
 
-                elif event.text.upper() in get_groups(c_user['type_id'], get_date(0)) \
-                        or event.text.upper() in get_groups(c_user['type_id'], get_date(1)) \
-                        or event.text.upper() in get_groups(c_user['type_id'], get_date(2)):
-                    db.users.update_one({'_id': event.user_id}, {'$set': {'group': event.text}})
-                    send(event.user_id, 'success_add', keyboard=day_count.get_keyboard())
+                    user.set_type_id(None)
+                    user.send('get_user_type', keyboard=GET_TYPE_KEYBOARD.get_keyboard())
+
+                elif event.text.upper() in get_groups(user.type_id, get_date(0)) \
+                        or event.text.upper() in get_groups(user.type_id, get_date(1)) \
+                        or event.text.upper() in get_groups(user.type_id, get_date(2)):
+
+                    user.set_group(event.text)
+                    user.send('success_add', keyboard=MAIN_KEYBOARD.get_keyboard())
 
                 else:
-                    send(event.user_id, 'error_group_not_found')
+                    user.send('error_group_not_found')
                 continue
 
-            if event.text.startswith('!'):
+            if event.text.startswith('/'):
+
                 args = event.text[1:].split()
+
                 if len(args) == 2:
-                    send(event.user_id, get_table(1, args[1], args[0].upper()), raw=True)
+                    user.send(get_table(1, args[1], args[0].upper()), raw=True)
                 else:
-                    send(event.user_id, 'error_lack_of_args')
-            elif event.text.lower() == 'инфо':
-                send(event.user_id, 'info')
+                    user.send('error_lack_of_args')
+
+            elif event.text.lower() in ['инфо', '?']:
+
+                user.send('info')
+
             elif event.text in ['На сегодня', '1']:
-                send(event.user_id, get_table(c_user['type_id'], get_date(0), c_user['group']),
-                     raw=True)
+
+                user.send_table(0)
+
             elif event.text in ['На завтра', '2']:
-                send(event.user_id,
-                     get_table(c_user['type_id'], get_date(1), c_user['group']), raw=True)
-            elif event.text.lower() == 'удалить':
-                db.users.delete_one({'_id': event.user_id})
-                send(event.user_id, 'start', keyboard=start_kbd.get_keyboard())
+
+                user.send_table(1)
+
+            elif event.text.lower() in ['удалить', '-']:
+
+                user.send('start', keyboard=START_KEYBOARD.get_keyboard())
+                user.delete()
             else:
-                send(event.user_id, 'error_command_not_found')
+                user.send('error_command_not_found')
 
 
 if __name__ == '__main__':
