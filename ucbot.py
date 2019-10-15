@@ -145,53 +145,56 @@ def main():
                     '_id': event.user_id,
                     'type_id': None,
                     'sub': False,
-                    'group': None
+                    'group': None,
                 })
                 send(event.user_id, 'get_user_type', keyboard=get_type.get_keyboard())
-            else:
-                c_user = db.users.find_one({'_id': event.user_id})
-                if c_user['type_id'] is None:
-                    if event.text in ['Преподователь', '2']:
-                        db.users.update_one({'_id': event.user_id}, {'$set': {'type_id': 2}})
-                        send(event.user_id, 'get_teacher_name', keyboard=cancel_key.get_keyboard())
-                    elif event.text in ['Студент', '1']:
-                        db.users.update_one({'_id': event.user_id}, {'$set': {'type_id': 1}})
-                        send(event.user_id, 'get_student_group', keyboard=cancel_key.get_keyboard())
+                continue
+
+            c_user = db.users.find_one({'_id': event.user_id})
+
+            if c_user['type_id'] is None:
+                if event.text in ['Преподователь', '2']:
+                    db.users.update_one({'_id': event.user_id}, {'$set': {'type_id': 2}})
+                    send(event.user_id, 'get_teacher_name', keyboard=cancel_key.get_keyboard())
+                elif event.text in ['Студент', '1']:
+                    db.users.update_one({'_id': event.user_id}, {'$set': {'type_id': 1}})
+                    send(event.user_id, 'get_student_group', keyboard=cancel_key.get_keyboard())
+                continue
+
+            if c_user['group'] is None:
+                if event.text in ['Вернуться обратно', '1']:
+                    db.users.update_one({'_id': event.user_id}, {'$set': {'type_id': None}})
+                    send(event.user_id, 'get_user_type', keyboard=get_type.get_keyboard())
+
+                elif event.text.upper() in get_groups(c_user['type_id'], get_date(0)) \
+                        or event.text.upper() in get_groups(c_user['type_id'], get_date(1)) \
+                        or event.text.upper() in get_groups(c_user['type_id'], get_date(2)):
+                    db.users.update_one({'_id': event.user_id}, {'$set': {'group': event.text}})
+                    send(event.user_id, 'success_add', keyboard=day_count.get_keyboard())
 
                 else:
-                    if c_user['group'] is None:
-                        if event.text in ['Вернуться обратно', '1']:
-                            db.users.update_one({'_id': event.user_id}, {'$set': {'type_id': None}})
-                            send(event.user_id, 'get_user_type', keyboard=get_type.get_keyboard())
+                    send(event.user_id, 'error_group_not_found')
+                continue
 
-                        elif event.text.upper() in get_groups(c_user['type_id'], get_date(0)) \
-                                or event.text.upper() in get_groups(c_user['type_id'], get_date(1)) \
-                                or event.text.upper() in get_groups(c_user['type_id'], get_date(2)):
-                            db.users.update_one({'_id': event.user_id}, {'$set': {'group': event.text}})
-                            send(event.user_id, 'success_add', keyboard=day_count.get_keyboard())
-
-                        else:
-                            send(event.user_id, 'error_group_not_found')
-                    else:
-                        if event.text.startswith('!'):
-                            args = event.text[1:].split()
-                            if len(args) == 2:
-                                send(event.user_id, get_table(1, args[1], args[0].upper()), raw=True)
-                            else:
-                                send(event.user_id, 'error_lack_of_args')
-                        elif event.text.lower() == 'инфо':
-                            send(event.user_id, 'info')
-                        elif event.text in ['На сегодня', '1']:
-                            send(event.user_id, get_table(c_user['type_id'], get_date(0), c_user['group']),
-                                 raw=True)
-                        elif event.text in ['На завтра', '2']:
-                            send(event.user_id,
-                                 get_table(c_user['type_id'], get_date(1), c_user['group']), raw=True)
-                        elif event.text.lower() == 'удалить':
-                            db.users.delete_one({'_id': event.user_id})
-                            send(event.user_id, 'start', keyboard=start_kbd.get_keyboard())
-                        else:
-                            send(event.user_id, 'error_command_not_found')
+            if event.text.startswith('!'):
+                args = event.text[1:].split()
+                if len(args) == 2:
+                    send(event.user_id, get_table(1, args[1], args[0].upper()), raw=True)
+                else:
+                    send(event.user_id, 'error_lack_of_args')
+            elif event.text.lower() == 'инфо':
+                send(event.user_id, 'info')
+            elif event.text in ['На сегодня', '1']:
+                send(event.user_id, get_table(c_user['type_id'], get_date(0), c_user['group']),
+                     raw=True)
+            elif event.text in ['На завтра', '2']:
+                send(event.user_id,
+                     get_table(c_user['type_id'], get_date(1), c_user['group']), raw=True)
+            elif event.text.lower() == 'удалить':
+                db.users.delete_one({'_id': event.user_id})
+                send(event.user_id, 'start', keyboard=start_kbd.get_keyboard())
+            else:
+                send(event.user_id, 'error_command_not_found')
 
 
 if __name__ == '__main__':
