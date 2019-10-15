@@ -14,23 +14,16 @@ from vk_api.longpoll import VkLongPoll, VkEventType
 
 _CONFIG = json.loads(open('config.json', "r", encoding='UTF-8').read())
 
-"""
-    MongoDB auth
-"""
+
 client = MongoClient('127.0.0.1', 27017)
 db = client.ucbot
 
 
-"""
-    Vk auth
-"""
 vk_session = vk_api.VkApi(token=open('token.txt', 'r', encoding='UTF-8').read())
 vk = vk_session.get_api()
 bot = VkLongPoll(vk_session)
 
-"""
-    Keyboards
-"""
+
 START_KEYBOARD = VkKeyboard()
 START_KEYBOARD.add_button('Начать', VkKeyboardColor.POSITIVE)
 
@@ -162,7 +155,7 @@ class User:
         else:
             vk.messages.send(user_id=self.id, message=msg, random_id=rnd, keyboard=keyboard)
 
-        print("* \033[95m(: \033[0m : id" + str(self.id) + " < ")
+        print(" < ")
 
     def send_table(self, days):
         self.send(get_table(self.type_id, get_date(days), self.group), raw=True)
@@ -188,6 +181,7 @@ def main():
     print('run')
     for event in bot.listen():
         if event.type == VkEventType.MESSAGE_NEW and event.to_me and event.text:
+            print(" > ")
             if db.users.count_documents({'_id': event.user_id}) == 0:
 
                 User.create(event.user_id)
