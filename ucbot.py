@@ -11,18 +11,14 @@ from pymongo import MongoClient
 from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 from vk_api.longpoll import VkLongPoll, VkEventType
 
-
 _CONFIG = json.loads(open('config.json', "r", encoding='UTF-8').read())
-
 
 client = MongoClient('127.0.0.1', 27017)
 db = client.ucbot
 
-
 vk_session = vk_api.VkApi(token=open('token.txt', 'r', encoding='UTF-8').read())
 vk = vk_session.get_api()
 bot = VkLongPoll(vk_session)
-
 
 START_KEYBOARD = VkKeyboard()
 START_KEYBOARD.add_button('Начать', VkKeyboardColor.POSITIVE)
@@ -41,28 +37,16 @@ MAIN_KEYBOARD.add_button('На завтра', VkKeyboardColor.POSITIVE)
 
 def get_groups(user_type, date) -> object:
     if db.groups.count_documents({'user_type': user_type, 'date': date}) == 0:
-        with requests.Session() as s:
-            result = s.post(url='http://uc.osu.ru/back_parametr.php', data={
-                'type_id': user_type,
-                'data': date
-            })
-            s.cookies.clear_session_cookies()
+        result = requests.post(url='http://uc.osu.ru/back_parametr.php', data={
+            'type_id': user_type,
+            'data': date
+        })
         if result.status_code == 200:
             result.encoding = 'UTF-8'
+            groups = {val: key for (key, val) in json.loads(result.text.replace(' ', '')).items()}
 
-            group_dict = result.text\
-                .replace('(с)', '')\
-                .replace('(ТМ)', '')\
-                .replace('(А)', '')
-
-            r = json.loads(group_dict)
-
-            rb = {val: key for (key, val) in r.items()}
-            group_dumps = json.dumps(rb, ensure_ascii=False, sort_keys=True, indent=2)
-
-            res = json.loads(group_dumps)
-            db.groups.insert_one({'user_type': user_type, 'date': date, 'value': res})
-            return res
+            db.groups.insert_one({'user_type': user_type, 'date': date, 'value': groups})
+            return groups
     else:
         return db.groups.find_one({'user_type': user_type, 'date': date})['value']
 
@@ -110,6 +94,8 @@ def get_timetable(user_type: int, user_group: str, date: str) -> str:
 
             db.tables.insert_one({'group': user_group, 'date': date, 'value': timetable})
             return timetable
+        else:
+            return 'error_request'
 
     elif db.tables.count_documents({'group': user_group, 'date': date}) > 0:
         result = db.tables.find_one({'group': user_group, 'date': date})
@@ -183,7 +169,6 @@ def main():
         if event.type == VkEventType.MESSAGE_NEW and event.to_me and event.text:
             print(" > ")
             if db.users.count_documents({'_id': event.user_id}) == 0:
-
                 User.create(event.user_id)
                 continue
 
@@ -250,4 +235,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
