@@ -114,7 +114,7 @@ def get_timetable(user_type: int, user_group: str, date: str) -> str:
 
 
 def get_table(user_type, user_date, group):
-    return get_timetable(user_type, get_groups(user_type, user_date)[group], user_date)
+    return get_timetable(user_type, get_groups(user_type, user_date)[group.upper()], user_date)
 
 
 def get_date(days):
@@ -151,16 +151,16 @@ def main():
             else:
                 c_user = db.users.find_one({'_id': event.user_id})
                 if c_user['type_id'] is None:
-                    if event.text == 'Преподователь':
+                    if event.text in ['Преподователь', '2']:
                         db.users.update_one({'_id': event.user_id}, {'$set': {'type_id': 2}})
                         send(event.user_id, 'get_teacher_name', keyboard=cancel_key.get_keyboard())
-                    elif event.text == 'Студент':
+                    elif event.text in ['Студент', '1']:
                         db.users.update_one({'_id': event.user_id}, {'$set': {'type_id': 1}})
                         send(event.user_id, 'get_student_group', keyboard=cancel_key.get_keyboard())
 
                 else:
                     if c_user['group'] is None:
-                        if event.text == 'Вернуться обратно':
+                        if event.text in ['Вернуться обратно', '1']:
                             db.users.update_one({'_id': event.user_id}, {'$set': {'type_id': None}})
                             send(event.user_id, 'get_user_type', keyboard=get_type.get_keyboard())
 
@@ -181,10 +181,10 @@ def main():
                                 send(event.user_id, 'error_lack_of_args')
                         elif event.text.lower() == 'инфо':
                             send(event.user_id, 'info')
-                        elif event.text == 'На сегодня':
+                        elif event.text in ['На сегодня', '1']:
                             send(event.user_id, get_table(c_user['type_id'], get_date(0), c_user['group']),
                                  raw=True)
-                        elif event.text == 'На завтра':
+                        elif event.text in ['На завтра', '2']:
                             send(event.user_id,
                                  get_table(c_user['type_id'], get_date(1), c_user['group']), raw=True)
                         elif event.text.lower() == 'удалить':
